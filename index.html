@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>共和历转换器 (特定算法版)</title>
+    <style>
+        :root {
+            --primary: #002654; /* French Blue */
+            --accent: #ED2939;  /* French Red */
+            --bg: #f4f1ea;      /* Parchment color */
+            --text: #333;
+        }
+
+        body {
+            font-family: 'Georgia', 'Times New Roman', serif;
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            max-width: 600px;
+            width: 100%;
+            border-top: 5px solid var(--primary);
+            border-bottom: 5px solid var(--accent);
+        }
+
+        h1 {
+            text-align: center;
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+        }
+
+        p.subtitle {
+            text-align: center;
+            font-style: italic;
+            color: #666;
+            margin-bottom: 2rem;
+            font-size: 0.9rem;
+        }
+
+        .converter-section {
+            margin-bottom: 2rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px dashed #ccc;
+        }
+
+        .converter-section:last-child {
+            border-bottom: none;
+        }
+
+        h2 {
+            font-size: 1.2rem;
+            color: var(--accent);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        input, select {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+
+        input[type="number"] {
+            width: 80px;
+        }
+
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background-color: #001a3d;
+        }
+
+        .result-box {
+            background: #f8f9fa;
+            padding: 15px;
+            border-left: 4px solid var(--accent);
+            margin-top: 15px;
+        }
+
+        .result-main {
+            font-size: 1.4rem;
+            font-weight: bold;
+            color: var(--primary);
+            margin-bottom: 5px;
+        }
+
+        .result-sub {
+            color: #666;
+            font-style: italic;
+        }
+
+        .fr-text {
+            font-family: 'Garamond', serif;
+        }
+        
+        .note {
+            font-size: 0.8rem;
+            color: #888;
+            margin-top: 8px;
+            border-top: 1px solid #eee;
+            padding-top: 5px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>共和历转换器（新版）</h1>
+    <p class="subtitle">Calendrier Républicain</p >
+
+    <div class="converter-section">
+        <h2>公历 &rarr; 共和历</h2>
+        <div class="input-group">
+            <input type="date" id="gregInput" value="2026-02-03">
+            <button onclick="convertGregToRep()">转换</button>
+        </div>
+        <div class="result-box" id="resultRep" style="display:none;">
+            <div class="result-main fr-text" id="repDateStr"></div>
+            <div class="result-sub" id="repDayName"></div>
+        </div>
+    </div>
+
+    <div class="converter-section">
+        <h2>共和历 &rarr; 公历</h2>
+        <div class="input-group">
+            <input type="number" id="repYearInput" placeholder="年份" value="234" min="1">
+            <select id="repMonthSelect">
+                </select>
+            <input type="number" id="repDayInput" placeholder="日" value="15" min="1" max="30">
+            <button onclick="convertRepToGreg()">转换</button>
+        </div>
+        <div class="result-box" id="resultGreg" style="display:none;">
+            <div class="result-main" id="gregDateStr"></div>
+            <div class="note">注：采用 (Year+1793) 规则，An VII 例外</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- 基础数据 ---
+    const monthsFr = [
+        "Vendémiaire", "Brumaire", "Frimaire", // 秋
+        "Nivôse", "Pluviôse", "Ventôse",       // 冬
+        "Germinal", "Floréal", "Prairial",     // 春
+        "Messidor", "Thermidor", "Fructidor",  // 夏
+        "Sans-culottides"                      // 补充日
+    ];
+
+    const dayNamesFr = [
+        "Primidi", "Duodi", "Tridi", "Quartidi", "Quintidi",
+        "Sextidi", "Septidi", "Octidi", "Nonidi", "Décadi"
+    ];
+
+    const sansCulottidesNames = [
+        "Jour de la Vertu (美德日)",
+        "Jour du Génie (天才日)",
+        "Jour du Travail (劳动日)",
+        "Jour de l'Opinion (舆论日)",
+        "Jour des Récompenses (奖赏日)",
+        "Jour de la Révolution (革命日)"
+    ];
+
+    function toRoman(num) {
+        if (num < 1) return "";
+        const roman = {
+            M: 1000, CM: 900, D: 500, CD: 400,
+            C: 100, XC: 90, L: 50, XL: 40,
+            X: 10, IX: 9, V: 5, IV: 4, I: 1
+        };
+        let str = '';
+        for (let i of Object.keys(roman)) {
+            let q = Math.floor(num / roman[i]);
+            num -= q * roman[i];
+            str += i.repeat(q);
+        }
+        return str;
+    }
+
+    const monthSelect = document.getElementById('repMonthSelect');
+    monthsFr.forEach((m, index) => {
+        let option = document.createElement('option');
+        option.value = index;
+        option.text = `${index + 1}. ${m}`;
+        monthSelect.add(option);
+    });
+    monthSelect.value = 4; // 默认选中 Pluviôse 方便测试
+
+    // --- 核心算法逻辑 (已根据要求修改) ---
+
+    // 共和历元年第一天 (1792-09-22)
+    const REPUBLICAN_EPOCH = new Date(1792, 8, 22).getTime(); 
+    const ONE_DAY = 24 * 60 * 60 * 1000;
+
+    /**
+     * 判断共和历某年是否为闰年 (用户指定规则)
+     * 规则：
+     * 1. 共和七年 (An 7) 为闰年 (例外)。
+     * 2. 其他年份：令 n = year + 1793。
+     * 3. 如果 n 是整百数，只有 n 能被 400 整除才是闰年。
+     * 4. 否则，如果 n 能被 4 整除即为闰年。
+     */
+    function isRepLeapYear(year) {
+        // 1. 共和七年例外
+        if (year === 7) return true;
+
+        const val = year + 1793;
+
+        // 2. 整百数判断
+        if (val % 100 === 0) {
+            return (val % 400 === 0);
+        }
+        
+        // 3. 普通整除4判断
+        return (val % 4 === 0);
+    }
+
+    /**
+     * 获取共和历某年的第一天对应的公历时间戳
+     * 通过累加每年的天数来推算
+     */
+    function getRepYearStartDate(year) {
+        let totalDays = 0;
+        for (let y = 1; y < year; y++) {
+            totalDays += isRepLeapYear(y) ? 366 : 365;
+        }
+        return REPUBLICAN_EPOCH + (totalDays * ONE_DAY);
+    }
+
+    // --- 功能 1: 公历 -> 共和历 ---
+    function convertGregToRep() {
+        const gregInput = document.getElementById('gregInput').value;
+        if (!gregInput) return;
+
+        const gregDate = new Date(gregInput);
+        // 使用 UTC 计算以避免时区偏差
+        const gregUTC = Date.UTC(gregDate.getFullYear(), gregDate.getMonth(), gregDate.getDate());
+        const epochUTC = Date.UTC(1792, 8, 22);
+
+        if (gregUTC < epochUTC) {
+            alert("共和历始于 1792年9月22日，请选择此之后的日期。");
+            return;
+        }
+
+        // 1. 计算总天数差
+        let diffDays = Math.floor((gregUTC - epochUTC) / ONE_DAY);
+
+        // 2. 推算年份
+        let year = 1;
+        while (true) {
+            let daysInYear = isRepLeapYear(year) ? 366 : 365;
+            if (diffDays < daysInYear) break;
+            diffDays -= daysInYear;
+            year++;
+        }
+
+        // 此时 diffDays 为当年内的第几天 (0-365)
+        // 3. 计算月份和日期
+        let month = Math.floor(diffDays / 30);
+        let day = (diffDays % 30) + 1;
+        let dayName = "";
+
+        if (month === 12) {
+            // 补充日 Sans-culottides
+            dayName = sansCulottidesNames[day - 1] || "";
+        } else {
+            // 普通月份
+            let dayIndex = (day - 1) % 10;
+            dayName = dayNamesFr[dayIndex];
+        }
+
+        // 4. 显示结果
+        const resultBox = document.getElementById('resultRep');
+        const dateStr = document.getElementById('repDateStr');
+        const daySub = document.getElementById('repDayName');
+
+        let displayDay = day;
+        let displayMonth = monthsFr[month];
+        let displayYear = toRoman(year);
+
+        dateStr.innerHTML = `${displayDay} ${displayMonth} An ${displayYear}`;
+        daySub.innerText = `${dayName} (第 ${year} 年)`;
+        resultBox.style.display = 'block';
+    }
+
+    // --- 功能 2: 共和历 -> 公历 ---
+    function convertRepToGreg() {
+        const year = parseInt(document.getElementById('repYearInput').value);
+        const month = parseInt(document.getElementById('repMonthSelect').value);
+        const day = parseInt(document.getElementById('repDayInput').value);
+
+        if (!year || year < 1) {
+            alert("请输入有效的年份");
+            return;
+        }
+
+        // 验证日期合法性
+        let maxDays = 30;
+        if (month === 12) { // 补充日
+            maxDays = isRepLeapYear(year) ? 6 : 5;
+        }
+
+        if (day < 1 || day > maxDays) {
+            alert(`在第 ${year} 年，该月份/时段只有 ${maxDays} 天`);
+            return;
+        }
+
+        // 1. 获取该共和历年份的起始公历时间戳
+        const yearStartTime = getRepYearStartDate(year);
+
+        // 2. 加上月份天数 (每个月30天) 和 日期天数
+        const totalOffsetDays = (month * 30) + (day - 1);
+
+        // 3. 生成公历日期 (通过 UTC 时间戳加减)
+        const targetTime = yearStartTime + (totalOffsetDays * ONE_DAY);
+        const targetDate = new Date(targetTime);
+        
+        // 这里的 targetDate 实际上是 UTC 时间戳转换来的，直接读 UTC 部分即可避免本地时区干扰
+        // 但为了简单和兼容 toLocaleDateString，我们构造一个新的 Date 对象，注意修正时区
+        // 下面这行创建一个基于 UTC 时间戳的 Date 对象
+        const finalDate = new Date(targetTime);
+        // 手动提取年月日以确保准确 (因为 setTime 设置的是 UTC 毫秒数)
+        // 由于我们之前的计算全都是基于 UTC 的 (REPUBLICAN_EPOCH 是本地构造但当做UTC用，ONE_DAY 是毫秒)
+        // 最稳妥的方法是利用 Date 对象的 UTC 方法
+        const resultYear = finalDate.getUTCFullYear();
+        const resultMonth = finalDate.getUTCMonth();
+        const resultDay = finalDate.getUTCDate();
+        
+        const displayDate = new Date(resultYear, resultMonth, resultDay);
+
+        const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' };
+        const resultStr = displayDate.toLocaleDateString('zh-CN', options);
+
+        document.getElementById('gregDateStr').innerText = resultStr;
+        document.getElementById('resultGreg').style.display = 'block';
+    }
+    
+    // 初始化执行一次
+    setTimeout(convertGregToRep, 100);
+
+</script>
+
+</body>
+</html>
